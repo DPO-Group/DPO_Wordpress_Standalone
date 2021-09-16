@@ -3,7 +3,7 @@
 ## DPO Group Standalone plugin v1.0.0 for Wordpress v5.8
 
 This is the DPO Group plugin for Wordpress Standalone. Please feel free to contact
-the [DPO Group support team](https://www.directpay.online/support/) should you require any assistance.
+the [DPO Group support team](https://dpogroup.com/contact-us/) should you require any assistance.
 
 ## Installation
 
