@@ -4,7 +4,7 @@
  * Plugin Name: DPO Group for Wordpress Standalone
  * Plugin URI: https://github.com/DPO-Group/DPO_Wordpress_Standalone
  * Description: Accept payments for WooCommerce using DPO Group's online payments service
- * Version: 1.0.0
+ * Version: 1.0.1
  * Tested: 5.8.0
  * Author: DPO Group
  * Author URI: https://www.dpogroup.com/africa/
@@ -76,7 +76,7 @@ function dpo_standalone_wp_payment()
         'companyRef'        => $reference,
         'customerDialCode'  => $dpo->dpo_standalone_customer_dial_code(),
         'customerZip'       => $dpo->dpo_standalone_customer_zip(),
-        'customerCountry'   => 'ZA',
+        'customerCountry'   => 'KE',
         'customerFirstName' => $eparts[0],
         'customerLastName'  => $eparts[1],
         'customerAddress'   => $dpo->dpo_standalone_customer_address(),
