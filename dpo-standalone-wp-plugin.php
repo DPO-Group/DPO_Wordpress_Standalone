@@ -50,6 +50,9 @@ function dpo_standalone_wp_payment()
         return;
     }
 
+    /** Validate reCAPTCHA **/
+    validate_form();
+
     $test_mode = get_option('dpo_standalone_test_mode') == 'yes';
 
     $dpo = new Dpo($test_mode);
@@ -209,6 +212,8 @@ function register_dpo_standalone_plugin_settings()
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_test_mode');
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_success_url');
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_failure_url');
+    register_setting('dpo_standalone_plugin_options', 'dpo_standalone_recaptcha_key');
+    register_setting('dpo_standalone_plugin_options', 'dpo_standalone_recaptcha_secret');
 
     /******************************* customer fields *******************************/
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_item_details');
@@ -274,8 +279,16 @@ function add_dpo_standalone_payment_shortcode()
         }
     }
 
+    $recaptcha_key = get_option('dpo_standalone_recaptcha_key');
+
     $html = <<<HTML
-<form method="post" action="$url">
+<script src="https://www.google.com/recaptcha/api.js"></script>
+<script>
+function onSubmit(token) {
+ document.getElementById("dpo-standalone-form").submit();
+}
+</script>
+<form method="post" action="$url" id="dpo-standalone-form">
     <input type="hidden" name="action" value="dpo_standalone_wp_payment">
     <table class="form-table">
         <tbody>
@@ -287,7 +300,10 @@ function add_dpo_standalone_payment_shortcode()
                     <input style="width:100%" type="number" name="dpo_standalone_payment_amount" step="0.01" placeholder="Amount" required="">
                 </td>
                 <td style="background-color: transparent;" colspan="1">
-                    <button style="width:100%" type="submit">Pay Now</button>
+                    <button style="width:100%" class="g-recaptcha" 
+        data-sitekey="$recaptcha_key" 
+        data-callback='onSubmit' 
+        data-action='dpo_standalone_wp_payment' type="submit">Pay Now</button>
                 </td>
             </tr>
             <tr>
@@ -389,6 +405,27 @@ function dpo_standalone_option_page_content()
                             class="description"> Uses test accounts if enabled. No real transactions processed </span>
                 </td>
             </tr>
+
+            <tr>
+                <th scope="row">Recaptcha Key</th>
+                <td>
+                    <input type="text" name="dpo_standalone_recaptcha_key" id="dpo_standalone_recaptcha_key"
+                           value="<?php
+                           echo get_option('dpo_standalone_recaptcha_key'); ?> ">
+                    <br>
+                </td>
+            </tr>
+
+            <tr>
+                <th scope="row">Recaptcha Secret</th>
+                <td>
+                    <input type="text" name="dpo_standalone_recaptcha_secret" id="dpo_standalone_recaptcha_secret"
+                           value="<?php
+                           echo get_option('dpo_standalone_recaptcha_secret'); ?> ">
+                    <br>
+                </td>
+            </tr>
+
             <!-- Create Token Api Fields -->
             <?php
             $fields = array(
@@ -600,4 +637,31 @@ function dpo_standalone_option_page_content()
         submit_button('Save Settings'); ?>
     </form>
     <?php
+}
+
+function validate_form()
+{
+    $referer_location = $_SERVER['HTTP_REFERER'];
+
+    $token  = $_POST['g-recaptcha-response'];
+    $action = $_POST['action'];
+    $secret = get_option('dpo_standalone_recaptcha_secret');
+
+    // call curl to POST request
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://www.google.com/recaptcha/api/siteverify");
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array('secret' => $secret, 'response' => $token)));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $arrResponse = json_decode($response, true);
+
+    // verify the response
+    if ($arrResponse["success"] == '1' && $arrResponse["action"] == $action && $arrResponse["score"] >= 0.5) {
+        return true;
+    } else {
+        header('Location:' . $referer_location);
+        exit(0);
+    }
 }

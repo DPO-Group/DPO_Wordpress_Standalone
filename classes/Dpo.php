@@ -58,11 +58,11 @@ class Dpo
         $this->verifyResponseCodes = array_flip($this->verifyResponses);
 
         if ($test_mode) {
-            $this->api_url       = self::$test_api_url;
-            $this->pay_url       = self::$test_pay_url;
+            $this->api_url = self::$test_api_url;
+            $this->pay_url = self::$test_pay_url;
         } else {
-            $this->api_url       = self::$live_api_url;
-            $this->pay_url       = self::$live_pay_url;
+            $this->api_url = self::$live_api_url;
+            $this->pay_url = self::$live_pay_url;
         }
 
         $this->company_token = get_option('dpo_standalone_company_token');
@@ -93,7 +93,7 @@ class Dpo
             </Service>
 POSTXML;
 
-        $customerPhone = preg_replace( '/[^0-9]/', '', $data['customerPhone'] );
+        $customerPhone = preg_replace('/[^0-9]/', '', $data['customerPhone']);
 
         $postXml = <<<POSTXML
         <?xml version="1.0" encoding="utf-8"?> <API3G> <CompanyToken>{$data['companyToken']}</CompanyToken> <Request>createToken</Request> <Transaction> <PaymentAmount>{$data['paymentAmount']}</PaymentAmount> <PaymentCurrency>{$data['paymentCurrency']}</PaymentCurrency> <CompanyRef>{$data['companyRef']}</CompanyRef> <customerDialCode>{$data['customerDialCode']}</customerDialCode> <customerZip>{$data['customerZip']}</customerZip> <customerCountry>{$data['customerCountry']}</customerCountry> <customerFirstName></customerFirstName> <customerLastName></customerLastName> <customerAddress>{$data['customerAddress']}</customerAddress> <customerCity>{$data['customerCity']}</customerCity> <customerPhone>{$customerPhone}</customerPhone> <RedirectURL>{$data['redirectURL']}</RedirectURL> <BackURL>{$data['backURL']}</BackURL> <customerEmail>{$data['customerEmail']}</customerEmail> </Transaction> <Services>$service</Services> </API3G>
