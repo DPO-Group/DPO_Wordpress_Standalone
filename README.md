@@ -1,8 +1,8 @@
-# DPO_Wordpress_Standalone
+# DPO_WordPress_Standalone
 
-## DPO Group Standalone plugin v1.0.1 for Wordpress v5.8
+## DPO Group Standalone plugin v1.0.1 for WordPress v5.8
 
-This is the DPO Group plugin for Wordpress Standalone. Please feel free to contact
+This is the DPO Group plugin for WordPress Standalone. Please feel free to contact
 the [DPO Group support team](https://dpogroup.com/contact-us/) should you require any assistance.
 
 ## Installation
