@@ -1,20 +1,22 @@
-<?php
+<?php /** @noinspection PhpMissingStrictTypesDeclarationInspection */
+
 /**
  *
  * Plugin Name: DPO Group for Wordpress Standalone
  * Plugin URI: https://github.com/DPO-Group/DPO_Wordpress_Standalone
  * Description: Accept payments for WooCommerce using DPO Group's online payments service
- * Version: 1.0.1
- * Tested: 5.8.0
+ * Version: 1.1.0
+ * Tested: 6.6.2
  * Author: DPO Group
  * Author URI: https://www.dpogroup.com/africa/
  * Developer: App Inlet (Pty) Ltd
  * Developer URI: https://www.appinlet.com/
  *
- * Copyright: © 2021 DPO Group
+ * Copyright: © 2024 DPO Group
  * License: GNU General Public License v3.0
  * License URI: http://www.gnu.org/licenses/gpl-3.0.html
  */
+use Dpo\Common\Dpo;
 
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 // Exit if accessed directly.
@@ -24,7 +26,8 @@ if ( ! defined('ABSPATH')) {
 
 const LOCATION = 'Location: ';
 
-require_once 'classes/Dpo.php';
+require_once 'classes/DPOStandalone.php';
+require_once 'vendor/autoload.php';
 
 add_action('plugins_loaded', 'dpo_standalone_init');
 add_action('admin_init', 'register_dpo_standalone_plugin_settings');
@@ -35,7 +38,10 @@ add_action('admin_post_nopriv_dpo_standalone_wp_payment_success', 'dpo_standalon
 add_action('admin_post_dpo_standalone_wp_payment_failure', 'dpo_standalone_wp_payment_failure');
 add_action('admin_post_nopriv_dpo_standalone_wp_payment_failure', 'dpo_standalone_wp_payment_failure');
 
-function dpo_standalone_wp_payment()
+/**
+ * @return void
+ */
+function dpo_standalone_wp_payment(): void
 {
     $email  = filter_var($_POST['dpo_standalone_payment_email'], FILTER_SANITIZE_EMAIL);
     $amount = filter_var(
@@ -53,11 +59,14 @@ function dpo_standalone_wp_payment()
     /** Validate reCAPTCHA **/
     validate_form();
 
-    $test_mode = get_option('dpo_standalone_test_mode') == 'yes';
+    $dpoStandaloneStandalone = new DPOStandalone();
+    $dpoCommon = new Dpo();
 
-    $dpo = new Dpo($test_mode);
+    try {
+        $reference = 'DPO_' . random_int(100000, 999999) . '_' . date('Y-m-d');
+    } catch (Exception $exception) {
+    }
 
-    $reference = 'DPO_' . random_int(100000, 999999) . '_' . date('Y-m-d');
     $eparts    = explode('@', $email);
 
     $post_id     = wp_insert_post(
@@ -70,80 +79,85 @@ function dpo_standalone_wp_payment()
     $success_url = admin_url() . "admin-post.php?action=dpo_standalone_wp_payment_success&post_id=$post_id";
     $failure_url = admin_url() . "admin-post.php?action=dpo_standalone_wp_payment_failure&post_id=$post_id";
 
-    $data = [
-        'orderItems'        => $dpo->getOrderItems(),
-        'companyToken'      => $dpo->get_company_token(),
-        'serviceType'       => $dpo->get_service_type(),
+    $dataArray = [
+        'orderItems'        => $dpoStandaloneStandalone->getOrderItems(),
+        'companyToken'      => $dpoStandaloneStandalone->getCompanyToken(),
+        'serviceType'       => $dpoStandaloneStandalone->getServiceType(),
         'paymentAmount'     => $amount,
         'paymentCurrency'   => 'KES',
         'companyRef'        => $reference,
-        'customerDialCode'  => $dpo->dpo_standalone_customer_dial_code(),
-        'customerZip'       => $dpo->dpo_standalone_customer_zip(),
+        'customerDialCode'  => $dpoStandaloneStandalone->getDialCode(),
+        'customerZip'       => $dpoStandaloneStandalone->getCustomerZip(),
         'customerCountry'   => 'KE',
         'customerFirstName' => $eparts[0],
         'customerLastName'  => $eparts[1],
-        'customerAddress'   => $dpo->dpo_standalone_customer_address(),
-        'customerCity'      => $dpo->dpo_standalone_customer_city(),
-        'customerPhone'     => $dpo->dpo_standalone_customer_phone(),
+        'customerAddress'   => $dpoStandaloneStandalone->getAddress(),
+        'customerCity'      => $dpoStandaloneStandalone->getCustomerCity(),
+        'customerPhone'     => $dpoStandaloneStandalone->getCustomerPhone(),
         'customerEmail'     => $email,
         'redirectURL'       => $success_url,
         'backURL'           => $failure_url,
     ];
 
-    $token = $dpo->createToken($data);
-    if ($token['success'] !== true) {
-        // Error
+    $token = '';
+    try {
+        $token = $dpoCommon->createToken($dataArray);
+    } catch (Exception $exception) {
     }
 
     $data1                 = [];
-    $data1['companyToken'] = $data['companyToken'];
+    $data1['companyToken'] = $dataArray['companyToken'];
     $transToken            = $data1['transToken'] = $token['transToken'];
     $transactionId         = $token['transRef'];
-    $dpoPay                = $dpo->get_pay_url() . '?ID=' . $transToken;
+    $dpoStandalonePay                = $dpoCommon->getPayUrl() . '?ID=' . $transToken;
 
     update_post_meta($post_id, 'dposa_transaction_token', $transToken);
     update_post_meta($post_id, 'dposa_transaction_id', $transactionId);
     update_post_meta($post_id, 'dposa_order_reference', $reference);
-    update_post_meta($post_id, 'dposa_order_data', $data);
+    update_post_meta($post_id, 'dposa_order_data', $dataArray);
 
     // Verify the token
-    $result = $dpo->verifyToken($data1);
+    $result = $dpoCommon->verifyToken($data1);
     if ($result != '') {
-        $result = new SimpleXMLElement($result);
+        try {
+            $result = new SimpleXMLElement($result);
+        } catch (Exception $exception) {
+        }
     }
     if ( ! is_string($result) && $result->Result->__toString() == '900') {
         // Redirect to payment portal
         echo <<<HTML
 <p>Kindly wait while you're redirected to the DPO Group ...</p>
-<form action="$dpoPay" method="post" name="dpo_redirect">
+<form action="$dpoStandalonePay" method="post" name="dpo_redirect">
         <input name="transToken" type="hidden" value="$transToken" />
 </form>
 <script type="text/javascript">document.forms['dpo_redirect'].submit();</script>
 HTML;
         die;
-    } else {
-        // Error
     }
 }
 
-function dpo_standalone_wp_payment_success()
+/**
+ * @return void
+ */
+function dpo_standalone_wp_payment_success(): void
 {
-    $test_mode = get_option('dpo_standalone_test_mode') == 'yes';
-    $dpo       = new Dpo($test_mode);
+    $dpoStandalone       = new DPOStandalone();
+    $dpoCommon = new Dpo();
 
     $post_id          = filter_var($_REQUEST['post_id'], FILTER_SANITIZE_NUMBER_INT);
-    $transactionToken = filter_var($_REQUEST['TransactionToken'], FILTER_SANITIZE_STRING);
-    $reference        = filter_var($_REQUEST['CompanyRef'], FILTER_SANITIZE_STRING);
-    $companyToken     = $dpo->get_company_token();
-    $data             = [
+    $transactionToken = filter_var($_REQUEST['TransactionToken'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $reference        = filter_var($_REQUEST['CompanyRef'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $companyToken     = $dpoStandalone->getCompanyToken();
+    $dataArray             = [
         'companyToken' => $companyToken,
         'transToken'   => $transactionToken,
     ];
 
     try {
-        $query    = $dpo->verifyToken($data);
+        $query    = $dpoCommon->verifyToken($dataArray);
         $verified = new SimpleXMLElement($query);
-        if ($verified->Result == '000') {
+        if ($verified->Result == '000' && $reference == $verified->CompanyRef->__toString()) {
             // Approved
             update_post_meta($post_id, 'dposa_order_status', 'paid');
             update_post_meta(
@@ -159,15 +173,14 @@ function dpo_standalone_wp_payment_success()
             );
             $qstring = "?reference=$reference&amount=$verified->TransactionAmount";
             header(LOCATION . site_url() . '/' . get_option('dpo_standalone_success_url') . $qstring);
-            die();
         } else {
             $status_desc = $verified->ResultExplanation->__toString();
             update_post_meta($post_id, 'dposa_order_status', 'failed');
             update_post_meta($post_id, 'dposa_order_failed_reason', $status_desc);
             $qstring = "?reference=$reference&reason=$status_desc";
             header(LOCATION . site_url() . '/' . get_option('dpo_standalone_failure_url') . $qstring);
-            die();
         }
+        die();
     } catch (Exception $exception) {
         $qstring = "?reference=$reference&reason=" . esc_url('The transaction could not be verified');
         header(LOCATION . site_url() . '/' . get_option('dpo_standalone_failure_url') . $qstring);
@@ -175,22 +188,25 @@ function dpo_standalone_wp_payment_success()
     }
 }
 
-function dpo_standalone_wp_payment_failure()
+/**
+ * @return void
+ */
+function dpo_standalone_wp_payment_failure(): void
 {
-    $test_mode = get_option('dpo_standalone_test_mode') == 'yes';
-    $dpo       = new Dpo($test_mode);
+    $dpoStandalone       = new DPOStandalone();
+    $dpoCommon = new Dpo();
 
     $post_id          = filter_var($_REQUEST['post_id'], FILTER_SANITIZE_NUMBER_INT);
-    $transactionToken = filter_var($_REQUEST['TransactionToken'], FILTER_SANITIZE_STRING);
-    $reference        = filter_var($_REQUEST['CompanyRef'], FILTER_SANITIZE_STRING);
-    $companyToken     = $dpo->get_company_token();
-    $data             = [
+    $transactionToken = filter_var($_REQUEST['TransactionToken'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $reference        = filter_var($_REQUEST['CompanyRef'], FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $companyToken     = $dpoStandalone->getCompanyToken();
+    $dataArray             = [
         'companyToken' => $companyToken,
         'transToken'   => $transactionToken,
     ];
 
     try {
-        $query       = $dpo->verifyToken($data);
+        $query       = $dpoCommon->verifyToken($dataArray);
         $verified    = new SimpleXMLElement($query);
         $status_desc = $verified->ResultExplanation->__toString();
         update_post_meta($post_id, 'dposa_order_status', 'failed');
@@ -205,7 +221,10 @@ function dpo_standalone_wp_payment_failure()
     }
 }
 
-function register_dpo_standalone_plugin_settings()
+/**
+ * @return void
+ */
+function register_dpo_standalone_plugin_settings(): void
 {
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_company_token');
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_service_type');
@@ -238,7 +257,10 @@ function register_dpo_standalone_plugin_settings()
     register_setting('dpo_standalone_plugin_options', 'dpo_standalone_show_xpay_logo');
 }
 
-function dpo_standalone_init()
+/**
+ * @return void
+ */
+function dpo_standalone_init(): void
 {
     // Add plugin settings
     add_action('admin_menu', 'register_dpo_standalone_plugin_page');
@@ -249,9 +271,15 @@ function dpo_standalone_init()
     add_shortcode('dpo_standalone_payment_failure', 'add_dpo_standalone_payment_failure_shortcode');
 }
 
-function add_dpo_standalone_payment_shortcode()
+/**
+ * @return string
+ */
+/**
+ * @return string
+ */
+function add_dpo_standalone_payment_shortcode(): string
 {
-    $url          = admin_url() . 'admin-post.php';
+    $adminUrl          = admin_url() . 'admin-post.php';
     $pay_methods  = [
         'airtelmoney',
         'amex',
@@ -271,24 +299,24 @@ function add_dpo_standalone_payment_shortcode()
         $logo_options["$pay_method"] = get_option("dpo_standalone_show_{$pay_method}_logo") == 'yes';
     }
 
-    $logo_options_html = '';
-    foreach ($logo_options as $k => $logo_option) {
+    $logoOptionsHtml = '';
+    foreach ($logo_options as $logoKey => $logo_option) {
         if ($logo_option) {
-            $logo_options_html .= '<img src="' . plugin_dir_url(__FILE__) . "assets/images/dpo-$k.png" . '"' .
-                                  " alt='$k' style='height: 20px !important; display: inline;'>";
+            $logoOptionsHtml .= '<img src="' . plugin_dir_url(__FILE__) . "assets/images/dpo-$logoKey.png" . '"' .
+                                  " alt='$logoKey' style='height: 20px !important; display: inline;'>";
         }
     }
 
     $recaptcha_key = get_option('dpo_standalone_recaptcha_key');
 
-    $html = <<<HTML
+    return <<<HTML
 <script src="https://www.google.com/recaptcha/api.js"></script>
 <script>
 function onSubmit(token) {
  document.getElementById("dpo-standalone-form").submit();
 }
 </script>
-<form method="post" action="$url" id="dpo-standalone-form">
+<form method="post" action="$adminUrl" id="dpo-standalone-form">
     <input type="hidden" name="action" value="dpo_standalone_wp_payment">
     <table class="form-table">
         <tbody>
@@ -308,23 +336,27 @@ function onSubmit(token) {
             </tr>
             <tr>
                 <td colspan="4" style="background-color: transparent;">
-                    <span>$logo_options_html</span>
+                    <span>$logoOptionsHtml</span>
                 </td>
             </tr>
         </tbody>
     </table>
 </form>
 HTML;
-
-    return $html;
 }
 
-function add_dpo_standalone_payment_success_shortcode()
+/**
+ * @return string
+ */
+/**
+ * @return string
+ */
+function add_dpo_standalone_payment_success_shortcode(): string
 {
     $reference = isset($_REQUEST['reference']) ? esc_html(
-        filter_var($_REQUEST['reference'], FILTER_SANITIZE_STRING)
+        filter_var($_REQUEST['reference'], FILTER_SANITIZE_FULL_SPECIAL_CHARS)
     ) : 'N/A';
-    $amount    = isset($_REQUEST['amount']) ? esc_html(filter_var($_REQUEST['amount'], FILTER_SANITIZE_STRING)) : 'N/A';
+    $amount    = isset($_REQUEST['amount']) ? esc_html(filter_var($_REQUEST['amount'], FILTER_SANITIZE_FULL_SPECIAL_CHARS)) : 'N/A';
 
     return <<<HTML
 <p>Reference: $reference</p>
@@ -332,12 +364,18 @@ function add_dpo_standalone_payment_success_shortcode()
 HTML;
 }
 
-function add_dpo_standalone_payment_failure_shortcode()
+/**
+ * @return string
+ */
+/**
+ * @return string
+ */
+function add_dpo_standalone_payment_failure_shortcode(): string
 {
     $reference = isset($_REQUEST['reference']) ? esc_html(
-        filter_var($_REQUEST['reference'], FILTER_SANITIZE_STRING)
+        filter_var($_REQUEST['reference'], FILTER_SANITIZE_FULL_SPECIAL_CHARS)
     ) : 'N/A';
-    $reason    = isset($_REQUEST['reason']) ? esc_html(filter_var($_REQUEST['reason'], FILTER_SANITIZE_STRING)) : 'N/A';
+    $reason    = isset($_REQUEST['reason']) ? esc_html(filter_var($_REQUEST['reason'], FILTER_SANITIZE_FULL_SPECIAL_CHARS)) : 'N/A';
 
     return <<<HTML
 <p>Reference: $reference</p>
@@ -345,7 +383,10 @@ function add_dpo_standalone_payment_failure_shortcode()
 HTML;
 }
 
-function register_dpo_standalone_plugin_page()
+/**
+ * @return void
+ */
+function register_dpo_standalone_plugin_page(): void
 {
     add_menu_page(
         'DPO Standalone',
@@ -356,7 +397,10 @@ function register_dpo_standalone_plugin_page()
     );
 }
 
-function dpo_standalone_option_page_content()
+/**
+ * @return void
+ */
+function dpo_standalone_option_page_content(): void
 {
     ?>
     <h2>DPO Standalone Payment Plugin</h2>
@@ -428,42 +472,42 @@ function dpo_standalone_option_page_content()
 
             <!-- Create Token Api Fields -->
             <?php
-            $fields = array(
-                'dpo_standalone_item_details'       => array(
-                    "Item Details",
-                    "ItemDetails field will be used to create token"
-                ),
-                'dpo_standalone_customer_dial_code' => array(
-                    "Customer Dial Code",
-                    "customerDialCode field data will be used to create token"
-                ),
-                'dpo_standalone_customer_zip'       => array(
-                    "Customer Zip",
-                    "customerZip field data will be used to create token"
-                ),
-                'dpo_standalone_customer_address'   => array(
-                    "Customer Address",
-                    "customerAddress field data will be used to create token"
-                ),
-                'dpo_standalone_customer_city'      => array(
-                    "Customer City",
-                    "customerCity field data will be used to create token"
-                ),
-                'dpo_standalone_customer_phone'     => array(
-                    "Customer Phone",
-                    "customerPhone field data will be used to create token"
-                )
-            );
-            foreach ($fields as $key => $field) {
+            $fields = [
+                'dpo_standalone_item_details'       => [
+                    'Item Details',
+                    'ItemDetails field will be used to create token'
+                ],
+                'dpo_standalone_customer_dial_code' => [
+                    'Customer Dial Code',
+                    'customerDialCode field data will be used to create token'
+                ],
+                'dpo_standalone_customer_zip'       => [
+                    'Customer Zip',
+                    'customerZip field data will be used to create token'
+                ],
+                'dpo_standalone_customer_address'   => [
+                    'Customer Address',
+                    'customerAddress field data will be used to create token'
+                ],
+                'dpo_standalone_customer_city'      => [
+                    'Customer City',
+                    'customerCity field data will be used to create token'
+                ],
+                'dpo_standalone_customer_phone'     => [
+                    'Customer Phone',
+                    'customerPhone field data will be used to create token'
+                ]
+            ];
+            foreach ($fields as $fieldKey => $field) {
                 ?>
                 <tr>
                     <th scope="row"><?php
                         echo $field[0]; ?></th>
                     <td>
                         <input type="text" name="<?php
-                        echo $key; ?>" id="<?php
-                        echo $key; ?>" value='<?php
-                        echo get_option("$key"); ?>'>
+                        echo $fieldKey; ?>" id="<?php
+                        echo $fieldKey; ?>" value='<?php
+                        echo get_option("$fieldKey"); ?>'>
                         <br/>
                         <span class="description"><?php
                             echo $field[1]; ?></span>
@@ -639,6 +683,12 @@ function dpo_standalone_option_page_content()
     <?php
 }
 
+/**
+ * @return true|void
+ */
+/**
+ * @return true|void
+ */
 function validate_form()
 {
     $referer_location = $_SERVER['HTTP_REFERER'];
@@ -648,17 +698,17 @@ function validate_form()
     $secret = get_option('dpo_standalone_recaptcha_secret');
 
     // call curl to POST request
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, "https://www.google.com/recaptcha/api/siteverify");
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array('secret' => $secret, 'response' => $token)));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    $response = curl_exec($ch);
-    curl_close($ch);
+    $curlRequest = curl_init();
+    curl_setopt($curlRequest, CURLOPT_URL, 'https://www.google.com/recaptcha/api/siteverify');
+    curl_setopt($curlRequest, CURLOPT_POST, 1);
+    curl_setopt($curlRequest, CURLOPT_POSTFIELDS, http_build_query(['secret' => $secret, 'response' => $token]));
+    curl_setopt($curlRequest, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($curlRequest);
+    curl_close($curlRequest);
     $arrResponse = json_decode($response, true);
 
     // verify the response
-    if ($arrResponse["success"] == '1' && $arrResponse["action"] == $action && $arrResponse["score"] >= 0.5) {
+    if ($arrResponse['success'] == '1' && $arrResponse['action'] == $action && $arrResponse['score'] >= 0.5) {
         return true;
     } else {
         header('Location:' . $referer_location);
