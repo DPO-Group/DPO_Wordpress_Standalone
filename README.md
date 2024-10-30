@@ -9,7 +9,7 @@ the [DPO Group support team](https://dpogroup.com/contact-us/) should you requir
 
 1. **Download the Plugin**
 - Please navigate to the [releases page](https://github.com/DPO-Group/DPO_Wordpress_Standalone/releases), download the
-[latest release (v1.1.0)](https://github.com/DPO-Group/DPO_Wordpress_Standalone/releases/download/v1.1.0/dpo-standalone-wp-plugin.zip) and unzip.
+[latest release (v1.1.0)](https://github.com/DPO-Group/DPO_Wordpress_Standalone/releases/download/v1.1.0/dpo-standalone-wp-plugin.zip).
 
 2. **Install the Plugin**
 - Navigate to the login page of your WordPress site (typically located at http://yourdomain.com/wp-admin). Enter your username and password to log in.
